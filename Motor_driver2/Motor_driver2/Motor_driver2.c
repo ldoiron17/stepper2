@@ -6,7 +6,7 @@
  */ 
 
 
-# define F_CPU 1000000UL
+# define F_CPU 1000000UL //1MHz clock speed, used for _delay_ms()
 
 #include <avr/io.h>
 #include <util/delay.h>
@@ -65,9 +65,10 @@ int main(void)
 	TIMSK = (1 << TOIE1) | (1 << OCIE1A) | (1 << OCIE1B);
 	
 	TCCR1A = (0 << WGM01) | (1 << WGM00);
-	TCCR1B = (0 << WGM13) | (1 << WGM12) | (0 << CS02) |(0 << CS01) | (1 << CS00);
-	OCR1A = 250;                 // 250e-6 seconds      // 0.001024*1954 ~= 2 therefore SIG_OUTPUT_COMPARE1A will be triggered every 2 seconds
-	OCR1B = 500;                       // 0.001024*977 = 1.0004480 therefore SIG_OUTPUT_COMPARE1B will be triggered every second
+	TCCR1B = (0 << WGM13) | (1 << WGM12) | (1 << CS02) |(0 << CS01) | (1 << CS00);
+	//Note OCR1B must be LESS THAN OCR1A
+	OCR1A = 2000;  //set PWM frequency  100*(1/8e6) =  12.5e-6 seconds                  /
+	OCR1B = 1000;   //set Duty Ratio     100*(1/8e6) =  12.5e-6 seconds              
 	sei();
 	
 	//Set up PWM timers
