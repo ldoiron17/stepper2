@@ -64,6 +64,7 @@
 
 //Define volatile variables for use in ISRs
 int volatile count = 0;
+int volatile iter = 0;
 int volatile state = 0;
 int volatile Controller_state = 1;
 int volatile Coordinates_updated = 0;
@@ -100,6 +101,7 @@ char *Verify_coords3 = "). Is this correct? (Y/N)";
 char *Verify_coords4 = "Moving To Desired Coordinates...";
 char *Verify_coords5 = "Please Renter Coordinates:";
 char volatile *newline = "\r\n";
+char volatile *clearline = "\r";
 
 void USART_Init( unsigned int ubrr )
 {
@@ -198,10 +200,10 @@ void Init_PWM(void){
 	TCCR3A = (0 << WGM31) | (0 << WGM30);// | (1 << COM3A0) | (1 << COM3B0);
 	TCCR3B = (0 << WGM33) | (1 << WGM32)| (1 << CS32) |(0 << CS31) | (1 << CS30);
 	TCCR1A = (0 << WGM01) | (0 << WGM00);// | (1 << COM1A0) | (1 << COM1B0);
-	TCCR1B = (0 << WGM13) | (1 << WGM12) | (1 << CS02) |(0 << CS01) | (1 << CS00);
+	TCCR1B = (0 << WGM13) | (1 << WGM12) | (0 << CS02) |(1 << CS01) | (1 << CS00); //clk_IO = clk/64
 	//Note OCR1B must be LESS THAN OCR1A
-	OCR1A = 2000;  //set PWM frequency  1000*(1/8e6) =  12.5e-5 seconds  (4KHz)
-	OCR1B = 50;   //set Duty Ratio     1000*(1/8e6) =  12.5e-5 seconds (4KHz)
+	OCR1A = 100;  //set PWM frequency  1000*(1/8e6) =  12.5e-5 seconds  (4KHz)
+	OCR1B = 2000;   //set Duty Ratio     1000*(1/8e6) =  12.5e-5 seconds (4KHz)
 	OCR3A = 2000;  //set PWM frequency  100*(1/8e6) =  12.5e-5 seconds
 	OCR3B = 50;   //set Duty Ratio     100*(1/8e6) =  12.5e-5 seconds
 	/************************Set up PWM timers***************************************/
@@ -251,22 +253,36 @@ void Motor_Disable (void){
 	    //Set Global Motors Disable Flag
 		Controller_state = DISABLED;
 	
-		DIS1_off();
+		DIS1_on();
 		PWM1A_off();
 		PWM1B_off();
-		DIS2_off();
+		DIS2_on();
 		PWM2A_off();
 		PWM2B_off();
-		DIS3_off();
+		DIS3_on();
 		PWM3A_off();
 		PWM3B_off();
 		
 		_delay_ms(1000); //delay 1 second before allowing anything else to happen
 	
 }
+
+void Motor_Enable (void){
+	
+	//Set Global Motors Disable Flag
+	Controller_state = DISABLED;
+	
+	DIS1_off();
+	DIS2_off();
+	//DIS3_off();
+
+	
+
+	
+}
 void Motor_Initialization( void ){
 	
-	/*
+	
 	//Set direction registers for GPIO (1 -> output, 0 -> input)
 	DDRA  = 0b11111111;
 	DDRD  = 0b01010000;
@@ -278,13 +294,14 @@ void Motor_Initialization( void ){
 	//Startup in a Disabled State
 	//Motor_Disable();
 	
-*/
+
 	
 }
 
 
 void Receive_Coords( void ){
 	
+	unsigned char tmp;
 	//Ask for input Coordinate X
 	Receiving_Coords = YES;
 	Coordinates_updated = NOT_UPDATED;
@@ -292,15 +309,16 @@ void Receive_Coords( void ){
 	USART_putstring(newline);
 	while( Coordinates_updated == NOT_UPDATED ){
 		
-		unsigned char tmp;
-		tmp = USART_Receive();
 		
-		LED1_off();
+		tmp = USART_Receive();
+		//USART_Transmit(tmp);
+		
+		//LED1_off();
 		if(Receiving_Coords == YES){
 				
 
 		if(Coordinates_updated == NOT_UPDATED){
-			parsed_coord = atoi(tmp);
+			parsed_coord = atoi(&tmp);
 			
 			Coordinates_updated = UPDATED;
 		}
@@ -324,13 +342,13 @@ void Receive_Coords( void ){
 	Coordinates_updated = NOT_UPDATED;
 	while( Coordinates_updated == NOT_UPDATED ){
 		
-		unsigned char tmp;
 		tmp = USART_Receive();
+		//USART_Transmit(tmp);
 		if(Receiving_Coords == YES){
 			
 
 			if(Coordinates_updated == NOT_UPDATED){
-				parsed_coord = atoi(tmp);
+				parsed_coord = atoi(&tmp);
 				Coordinates_updated = UPDATED;
 			}
 			
@@ -360,21 +378,71 @@ void Receive_Coords( void ){
 	USART_putstring(newline);
 	while( Coordinates_verified == UNVERIFIED ){
 		
-		unsigned char tmp;
 		tmp = USART_Receive();
-		
-		if(tmp == 'Y' | tmp =='y'){
+		//USART_Transmit(tmp);
+		//LED1_off();
+		if(tmp == 'y'){
 			Coordinates_correct == YES;
+			Coordinates_verified = VERIFIED;
+		}else{
+			Receive_Coords();
 		}
-		
-		if(Coordinates_correct == YES){
-			 Coordinates_verified = VERIFIED;
-		}
+		//USART_putstring(clearline);
+
 	}
 	
 	Receiving_Coords = NO;
 	
 }
+
+
+	
+int main(void)
+{
+	
+	cli(); 
+	//char data_test = 'a';
+	//unsigned int ubrr;	//Used to Initial Baud Rate
+	//ubrr = MYUBRR;
+	//int state=0;
+	count = 0;
+	Init_PWM();
+	//Init_ADC();
+	
+	Motor_Initialization();	
+	//LED1_on();
+	//LED2_on();
+	USART_Init(416);
+	sei(); //Enable all interrupts
+	
+	//PORTB &= ~(_BV(2));
+	USART_putstring(clr_screen);
+	//_delay_ms(500);
+	USART_putstring(Init_statement); //Print Startup Message over USB
+	//USART_putstring("Moving To Desired Coordinates...\r\n");
+	//USART_putstring("Moving To Desired Coordinates...\r\n");
+	LED1_off();
+	LED2_off();
+	Motor_Enable();
+	
+		//PORTB &= ~(_BV(2));
+		//PORTB |= (_BV(2));
+	while(1){
+		
+		LED1_on();
+		Receive_Coords();
+		USART_putstring("Moving To Desired Coordinates...\r\n");
+		
+
+		/*if( (ADCSRA & (1<<ADIF)) == 1){
+			LED2_on();
+			}else{
+			LED2_off();
+
+		*/
+	}
+}
+
 
 	/*
 ISR(USART1_RX_vect)
@@ -428,10 +496,13 @@ ISR(USART1_TX_vect)
 	//LED1_on();
 	//UCSR1A = (0 << TXC1);
 }
-
+*/
 
 ISR(TIMER1_COMPA_vect) //interrupt service routine for timer1 compare A flag
 	{
+		
+		
+		/* Full step code
 		if(count == 0){
 			count += 1;
 			PWM1A = ON;
@@ -458,18 +529,110 @@ ISR(TIMER1_COMPA_vect) //interrupt service routine for timer1 compare A flag
 			PWM2A_off();
 			PWM2B_on();
 			count = 0;
+		} */
+		
+	// Half step code
+		if(count == 0){
+			count += 1;
+			PWM1A = ON;
+			PWM1B = OFF;
+			PWM1A_on();
+			PWM1B_off();
+			PWM2A = ON;
+			PWM2B = OFF;
+			PWM2A_on();
+			PWM2B_off();
+		}else if(count == 1){
+			count += 1;
+			PWM1A = OFF;
+			PWM1B = OFF;
+			PWM1A_off();
+			PWM1B_off();
+			PWM2A = ON;
+			PWM2B = OFF;
+			PWM2A_on();
+			PWM2B_off();
+		}else if(count == 2){
+			count += 1;
+			PWM1A = OFF;
+			PWM1B = ON;
+			PWM1A_off();
+			PWM1B_on();
+			PWM2A = ON;
+			PWM2B = OFF;
+			PWM2A_on();
+			PWM2B_off();
+		}else if(count == 3){
+			count += 1;
+			PWM1A = OFF;
+			PWM1B = ON;
+			PWM1A_off();
+			PWM1B_on();
+			PWM2A = OFF;
+			PWM2B = OFF;
+			PWM2A_off();
+			PWM2B_off();
+		}else if(count == 4){
+			count += 1;
+			PWM1A = OFF;
+			PWM1B = ON;
+			PWM1A_off();
+			PWM1B_on();
+			PWM2A = OFF;
+			PWM2B = ON;
+			PWM2A_off();
+			PWM2B_on();
+		}else if(count == 5){
+			count += 1;
+			PWM1A = OFF;
+			PWM1B = OFF;
+			PWM1A_off();
+			PWM1B_off();
+			PWM2A = OFF;
+			PWM2B = ON;
+			PWM2A_off();
+			PWM2B_on();
+		}else if(count == 6){
+			count += 1;
+			PWM1A = ON;
+			PWM1B = OFF;
+			PWM1A_on();
+			PWM1B_off();
+			PWM2A = OFF;
+			PWM2B = ON;
+			PWM2A_off();
+			PWM2B_on();
+		} else{
+			count = 0;
+			PWM1A = ON;
+			PWM1B = OFF;
+			PWM1A_on();
+			PWM1B_off();
+			PWM2A = OFF;
+			PWM2B = OFF;
+			PWM2A_off();
+			PWM2B_off();
+	}
+	
+	/*	if(iter == 100){
+			iter = 0;
+			if(OCR1A > 50){
+				OCR1A -= 1;
+			}
+		}else{
+			iter += 1;
 		}
+*/
 	}
 
 	ISR(TIMER1_COMPB_vect) //interrupt service routine for timer1 compare B flag
 	{
-		//PWM2A_off();
-		//PWM2B_on();
+
 	}
 	
 	ISR(TIMER3_COMPA_vect) //interrupt service routine for timer3 compare A flag
 	{
-		if(count == 0){
+		/*if(count == 0){
 			count += 1;
 			PWM1A = ON;
 			PWM1B = OFF;
@@ -495,7 +658,7 @@ ISR(TIMER1_COMPA_vect) //interrupt service routine for timer1 compare A flag
 			PWM2A_off();
 			PWM2B_on();
 			count = 0;
-		}
+		}*/
 	}
 
 	ISR(TIMER3_COMPB_vect) //interrupt service routine for timer1 compare B flag
@@ -504,6 +667,7 @@ ISR(TIMER1_COMPA_vect) //interrupt service routine for timer1 compare A flag
 		//PWM3B_on();
 	}
 	
+	/*
 	ISR(ADC_vect) 
 	{
 		
@@ -689,72 +853,3 @@ ISR(TIMER1_COMPA_vect) //interrupt service routine for timer1 compare A flag
 			
 	}
 	*/
-	
-int main(void)
-{
-	
-	//cli(); 
-	//char data_test = 'a';
-	//unsigned int ubrr;	//Used to Initial Baud Rate
-	//ubrr = MYUBRR;
-	//int state=0;
-	//count = 0;
-	//Init_PWM();
-	//Init_ADC();
-	
-	//Motor_Initialization();	
-	//LED1_on();
-	//LED2_on();
-	USART_Init(416);
-	sei(); //Enable all interrupts
-	
-	//PORTB &= ~(_BV(2));
-	//USART_putstring(clr_screen);
-	//_delay_ms(500);
-	//USART_putstring(Init_statement); //Print Startup Message over USB
-	//USART_putstring("Moving To Desired Coordinates...\r\n");
-	//USART_putstring("Moving To Desired Coordinates...\r\n");
-	LED1_off();
-	LED2_off();
-	
-	
-		//PORTB &= ~(_BV(2));
-		//PORTB |= (_BV(2));
-	while(1){
-		
-		//if( (UCSR1B &= (1<<TXEN1)) == 1){
-		////	LED2_on();
-		//}else{
-		//	LED2_off();
-		//}
-		USART_Transmit('2');
-		//LED1_on();
-		/*_delay_ms(100);
-		unsigned char tmp;
-		tmp = USART_Receive();
-		//USART_Receive();
-		if( tmp == '2'){
-			LED2_on();
-		}else{
-			LED2_off();
-		}		
-		LED1_off();
-		_delay_ms(100);
-		LED1_on();
-		_delay_ms(100);
-		
-		*/
-		//Receive_Coords();
-		//USART_putstring("Moving To Desired Coordinates...\r\n");
-		
-
-		/*if( (ADCSRA & (1<<ADIF)) == 1){
-			LED2_on();
-			}else{
-			LED2_off();
-
-		*/
-	}
-}
-
-
